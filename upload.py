@@ -132,13 +132,14 @@ def run_upload():
         print("Already posted 2 videos today. Exiting...")
         return
 
-    # Check how many videos are available to upload
-    available_to_upload = sum(1 for i, row in df.iterrows() if row["Posted"] != "TRUE")
+    # Check how many videos are available to upload (case-insensitive and handle None/empty)
+    available_to_upload = sum(1 for i, row in df.iterrows() if str(row["Posted"]).strip().upper() != "TRUE")
     print(f"Number of videos available to upload: {available_to_upload}")
 
     uploaded = False
     for i, row in df.iterrows():
-        if row["Posted"] != "TRUE":
+        # Case-insensitive check for "TRUE"
+        if str(row["Posted"]).strip().upper() != "TRUE":
             print(f"\n▶️ Uploading: {row['Caption']}")
             video_url = row["Reel URL"]
             video_file = "temp.mp4"
@@ -153,11 +154,13 @@ def run_upload():
                 uploaded = True
 
                 print(f"Video uploaded at {ist_now.strftime('%Y-%m-%d %H:%M:%S')} IST: https://www.youtube.com/shorts/{video_id}")
+                # Successfully uploaded, no need to continue
                 break
             except Exception as e:
                 print(f"Error uploading video: {e}")
                 if os.path.exists(video_file):
                     os.remove(video_file)
+                # Continue to try the next row
                 continue
 
     if not uploaded:
