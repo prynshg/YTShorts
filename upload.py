@@ -23,7 +23,6 @@ def get_authenticated_youtube():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            # In GitHub Actions, we'll use environment variables for credentials
             client_config = {
                 "installed": {
                     "client_id": os.environ["CLIENT_ID"],
@@ -34,7 +33,6 @@ def get_authenticated_youtube():
                 }
             }
             flow = InstalledAppFlow.from_client_config(client_config, YOUTUBE_SCOPES)
-            # Use refresh token from GitHub Secrets
             flow.fetch_token(refresh_token=os.environ["REFRESH_TOKEN"])
             creds = flow.credentials
         with open("tokens.json", "w") as token:
@@ -124,12 +122,19 @@ def run_upload():
     ist_now = datetime.fromtimestamp(utc_now.timestamp() + ist_offset)
     current_date = ist_now.date()
 
+    # Default to a past date if Upload Time is missing
+    default_date = datetime(1970, 1, 1)
     # Check how many videos were posted today
-    posted_today = sum(1 for i, row in df.iterrows() if row["Posted"] == "TRUE" and pd.to_datetime(row.get("Upload Time", ist_now)).date() == current_date)
+    posted_today = sum(1 for i, row in df.iterrows() if row["Posted"] == "TRUE" and pd.to_datetime(row.get("Upload Time", default_date)).date() == current_date)
+    print(f"Number of videos posted today ({current_date}): {posted_today}")
 
     if posted_today >= 2:
         print("Already posted 2 videos today. Exiting...")
         return
+
+    # Check how many videos are available to upload
+    available_to_upload = sum(1 for i, row in df.iterrows() if row["Posted"] != "TRUE")
+    print(f"Number of videos available to upload: {available_to_upload}")
 
     uploaded = False
     for i, row in df.iterrows():
