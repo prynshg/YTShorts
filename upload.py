@@ -4,7 +4,6 @@ import pandas as pd
 import requests
 from datetime import datetime
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -17,26 +16,48 @@ GSHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 # Authenticate YouTube using OAuth
 def get_authenticated_youtube():
     creds = None
+    # Check if tokens.json exists (it won't persist in GitHub Actions)
     if os.path.exists("tokens.json"):
-        creds = Credentials.from_authorized_user_file("tokens.json", YOUTUBE_SCOPES)
+        try:
+            creds = Credentials.from_authorized_user_file("tokens.json", YOUTUBE_SCOPES)
+            print("Loaded credentials from tokens.json")
+        except Exception as e:
+            print(f"Error loading tokens.json: {e}")
+
+    # If credentials are missing or invalid, create new ones using refresh_token
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+        print("Credentials missing or invalid, attempting to fetch new token...")
+        try:
+            refresh_token = os.environ.get("REFRESH_TOKEN")
+            if not refresh_token:
+                raise ValueError("REFRESH_TOKEN environment variable is missing")
+            print(f"Using refresh_token: {refresh_token[:10]}...")  # Log first 10 chars for debugging
+            
+            # Construct credentials using the refresh_token
+            creds = Credentials(
+                token=None,  # Access token will be fetched using refresh_token
+                refresh_token=refresh_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=os.environ["CLIENT_ID"],
+                client_secret=os.environ["CLIENT_SECRET"],
+                scopes=YOUTUBE_SCOPES
+            )
+            
+            # Refresh the credentials to get a new access token
             creds.refresh(Request())
-        else:
-            client_config = {
-                "installed": {
-                    "client_id": os.environ["CLIENT_ID"],
-                    "client_secret": os.environ["CLIENT_SECRET"],
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob"]
-                }
-            }
-            flow = InstalledAppFlow.from_client_config(client_config, YOUTUBE_SCOPES)
-            flow.fetch_token(refresh_token=os.environ["REFRESH_TOKEN"])
-            creds = flow.credentials
-        with open("tokens.json", "w") as token:
-            token.write(creds.to_json())
+            print("Successfully fetched new access token using refresh_token")
+        except Exception as e:
+            print(f"Error refreshing token: {e}")
+            raise
+
+        # Save the new credentials to tokens.json
+        try:
+            with open("tokens.json", "w") as token:
+                token.write(creds.to_json())
+            print("Saved new credentials to tokens.json")
+        except Exception as e:
+            print(f"Error saving tokens.json: {e}")
+
     return build("youtube", "v3", credentials=creds)
 
 # Upload video to YouTube Shorts
